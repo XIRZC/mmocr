@@ -6,6 +6,7 @@ import torchvision.datasets as datasets
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import cv2
+import PIL
 import numpy as np
 import imgaug.augmenters as iaa
 
@@ -24,27 +25,52 @@ class TwoCropsTransform:
 class SeqCLRAug(object):
 
     def __call__(slef, x):
+        # numpy ndarray <-> PIL Image
+        # >>> I = numpy.asarray(PIL.Image.open('test.jpg'))
+        # >>> im = PIL.Image.fromarray(numpy.uint8(I))
+        # x is a pillow image, which should be transformed into numpy for processing
+        x = np.asarray(x)
+
         aug_pipeline = iaa.Sequential([iaa.SomeOf((1, 5),
         [
             iaa.LinearContrast((0.5, 1.0)),
             iaa.GaussianBlur((0.5, 1.5)),
+            iaa.Crop(percent=((0, 0.4),
+                            (0, 0),
+                            (0, 0.4),
+                            (0, 0.0)),
+                            keep_size=True),
+            iaa.Crop(percent=((0, 0.0),
+                            (0, 0.02),
+                            (0, 0),
+                            (0, 0.02)),
+                            keep_size=True),
             iaa.Sharpen(alpha=(0.0, 0.5),
                             lightness=(0.0, 0.5)),
             iaa.PiecewiseAffine(scale=(0.02, 0.03), mode='edge'),
             iaa.PerspectiveTransform(scale=(0.01, 0.02))
         ],
         random_order=True)])
-        return aug_pipeline(images=[x])[0]
+
+        # aug_pipeline = iaa.Sequential(
+        # [
+        #     iaa.LinearContrast((0.5, 1.0)),
+        #     iaa.GaussianBlur((0.5, 1.5)),
+        #     iaa.Sharpen(alpha=(0.0, 0.5),
+        #                     lightness=(0.0, 0.5)),
+        #     iaa.PiecewiseAffine(scale=(0.02, 0.03), mode='edge'),
+        #     iaa.PerspectiveTransform(scale=(0.01, 0.02))
+        # ])
+
+        return PIL.Image.fromarray(aug_pipeline(images=[x])[0])
 
 
 def get_train_loader():
-    traindir = os.path.join('./data/mixture/SynthText/TMPCST')
+    traindir = os.path.join('./data/mixture/SynthTextC')
     
     augmentation1 = [
         transforms.Resize([32, 32]),
-        # transforms.RandomApply([
-        #     SeqCLRAug(),
-        # ], p=0.8),
+        SeqCLRAug(),
         transforms.RandomApply([
             transforms.ColorJitter(0.4, 0.4, 0.2, 0.1),
         ], p=0.8),
@@ -54,9 +80,7 @@ def get_train_loader():
 
     augmentation2 = [
         transforms.Resize([32, 32]),
-        # transforms.RandomApply([
-        #     SeqCLRAug(),
-        # ], p=0.8),
+        SeqCLRAug(),
         transforms.RandomApply([
             transforms.ColorJitter(0.4, 0.4, 0.2, 0.1),
         ], p=0.8),
@@ -76,18 +100,29 @@ def get_train_loader():
 
     return train_dataloader
 
-def visualize_images_by_grid(batch_imgs, rows, cols):
+def visualize_images_by_grid(batch_data, rows, cols):
+
+    (batch_imgs1, batch_imgs2), batch_labels = batch_data
     
-    plt.figure(figsize=(8, 8), facecolor="gray")
+    plt.figure(figsize=(14, 7), facecolor="gray")
     plt.rcParams["axes.facecolor"] = "#0D0434"
     plt.subplots_adjust(hspace=0.4, wspace=0.6)
 
-    gs = GridSpec(rows, cols)
+    gs = GridSpec(rows, 2*cols+1)
     for i in range(rows):
-        for j in range(cols):
+        for j in range(2*cols+1):
             plt.subplot(gs[i, j])
-            # print(f"type: {type(batch_imgs[i*rows+j])}, shape: {batch_imgs[i*rows+j*cols].shape}")
-            plt.imshow(batch_imgs[i*rows+j].numpy().transpose((1, 2, 0)))
+            # 0~cols-1
+            if j // cols < 1:
+                img_ndarray = batch_imgs1[i*rows+j].numpy()
+                plt.xlabel(batch_labels[i*rows+j])
+            # cols
+            elif j % cols == 0 and j // cols == 1:
+                img_ndarray = np.zeros_like(batch_imgs1[i*rows].numpy())
+            # cols+1~2*cols
+            else:
+                img_ndarray = batch_imgs2[i*rows+j-(cols+1)].numpy()
+            plt.imshow(img_ndarray.transpose((1, 2, 0)))
             plt.xticks([])
             plt.yticks([])
             plt.axis('off')
@@ -95,11 +130,8 @@ def visualize_images_by_grid(batch_imgs, rows, cols):
 
 def main():
     train_dataloader = get_train_loader()
-    for i, (batch_imgs, _) in enumerate(train_dataloader):
-        batch_imgs1, batch_imgs2 = batch_imgs
-        visualize_images_by_grid(batch_imgs1, 10, 10)
-        visualize_images_by_grid(batch_imgs2, 10, 10)
-        break
+    for i, (batch_data) in enumerate(train_dataloader):
+        visualize_images_by_grid(batch_data, 10, 10)
 
 if __name__ == '__main__':
     main()

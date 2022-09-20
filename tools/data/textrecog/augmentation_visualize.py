@@ -38,7 +38,7 @@ class SeqCLRAug(object):
 
 
 def get_train_loader():
-    traindir = os.path.join('./data/mixture/SynthText/TMPST')
+    traindir = os.path.join('./data/mixture/SynthText/TMPCST')
     
     augmentation1 = [
         transforms.Resize([32, 32]),

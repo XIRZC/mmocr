@@ -13,12 +13,13 @@ def parse_args():
         description='Crop images in Synthtext-style dataset in '
         'prepration for MMOCR\'s use')
     parser.add_argument(
-        'anno_path', help='Path to gold annotation data (gt.mat)')
-    parser.add_argument('img_path', help='Path to images')
-    parser.add_argument('out_dir', help='Path of output images and labels')
+        '--anno_path', default='data/mixture/SynthText/gt.mat', type=str, help='Path to gold annotation data (gt.mat)')
+    parser.add_argument('--img_path', default='data/mixture/SynthText', type=str,  help='Path to images')
+    parser.add_argument('--out_dir', default='data/mixture/SynthText/SynthText_wpatch_horizontal', type=str, help='Path of output images and labels')
+    parser.add_argument('--resume_samples', default='0', type=int, help='Resume cropping from the order of last stopped samples(from 0 on)')
     parser.add_argument(
         '--n_proc',
-        default=1,
+        default=8,
         type=int,
         help='Number of processes to run with')
     args = parser.parse_args()
@@ -74,14 +75,14 @@ def load_gt_datum(datum):
     return img_path, words, word_bboxes, char_bbox_grps
 
 
-def load_gt_data(filename, n_proc):
+def load_gt_data(filename, n_proc, resume_samples):
     mat_data = loadmat(filename, simplify_cells=True)
     imnames = mat_data['imnames']
     txt = mat_data['txt']
     wordBB = mat_data['wordBB']
     charBB = mat_data['charBB']
     return mmcv.track_parallel_progress(
-        load_gt_datum, list(zip(imnames, txt, wordBB, charBB)), nproc=n_proc)
+        load_gt_datum, list(zip(imnames, txt, wordBB, charBB))[resume_samples:], nproc=n_proc)
 
 
 def process(data, img_path_prefix, out_dir):
@@ -132,7 +133,9 @@ def process(data, img_path_prefix, out_dir):
 def main():
     args = parse_args()
     print('Loading annoataion data...')
-    data = load_gt_data(args.anno_path, args.n_proc)
+    if args.resume_samples != 0:
+        print(f'But from sample {args.resume_samples+1} on, remaining {858750-args.resume_samples} samples for whole {858750} samples !!!')
+    data = load_gt_data(args.anno_path, args.n_proc, args.resume_samples)
     process_with_outdir = partial(
         process, img_path_prefix=args.img_path, out_dir=args.out_dir)
     print('Creating cropped images and gold labels...')
